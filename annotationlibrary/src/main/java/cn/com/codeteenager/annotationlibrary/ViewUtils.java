@@ -1,7 +1,11 @@
 package cn.com.codeteenager.annotationlibrary;
 
 import android.app.Activity;
+import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.view.View;
+import android.widget.Toast;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -48,8 +52,10 @@ public class ViewUtils {
                 int[] viewIds = onClick.value();
                 for (int viewId : viewIds) {
                     View view = finder.findViewById(viewId);
+                    //扩展功能 检查网络
+                    boolean isCheckNet = method.getAnnotation(CheckNet.class) != null;
                     if (view != null) {
-                        view.setOnClickListener(new DeclaredOnClickListener(method, object));
+                        view.setOnClickListener(new DeclaredOnClickListener(method, object, isCheckNet));
                     }
                 }
             }
@@ -95,14 +101,23 @@ public class ViewUtils {
     private static class DeclaredOnClickListener implements View.OnClickListener {
         private Object mObject;
         private Method mMethod;
+        private boolean mIsCheckNet;
 
-        public DeclaredOnClickListener(Method method, Object object) {
+        public DeclaredOnClickListener(Method method, Object object, boolean isCheckNet) {
             this.mMethod = method;
             this.mObject = object;
+            this.mIsCheckNet = isCheckNet;
         }
 
         @Override
         public void onClick(View v) {
+            //需不需要检测网络
+            if (mIsCheckNet) {
+                if (!networkAvailable(v.getContext())) {
+                    Toast.makeText(v.getContext(), "没有网络连接", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+            }
             //点击调用该方法
             try {
                 //所有方法都可以 包括公有私有
@@ -111,7 +126,22 @@ public class ViewUtils {
                 mMethod.invoke(mObject, v);
             } catch (Exception e) {
                 e.printStackTrace();
+                try {
+                    mMethod.invoke(mObject, null);
+                } catch (Exception e1) {
+                    e1.printStackTrace();
+                }
             }
         }
+    }
+
+    private static boolean networkAvailable(Context context) {
+        //得到连接管理器对象
+        ConnectivityManager connectivityManager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo activeNetworkInfo = connectivityManager.getActiveNetworkInfo();
+        if (activeNetworkInfo != null && activeNetworkInfo.isConnected()) {
+            return true;
+        }
+        return false;
     }
 }
